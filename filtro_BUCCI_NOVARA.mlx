@@ -1,0 +1,784 @@
+clear all
+clc
+syms s x W f uH uF 
+Parametri filtro
+deg_BP=16;
+rip_BP=0.5;
+ft_inf=1000;
+ft_sup=2000;
+Wr=sqrt(2*pi*ft_inf*2*pi*ft_sup);
+BW=ft_sup-ft_inf;
+fprintf('Parametri filtro Chebyshev 0.5dB ripple:\n')
+fprintf('Grado filtro passa-banda:%d°ordine\n',deg_BP);
+fprintf('Frequenza di taglio inferiore:%d Hz\n',ft_inf);
+fprintf('Frequenza di taglio superiore:%d Hz\n',ft_sup);
+Funzione di trasferimento filtro passa-basso normalizzato
+%creazione filtro passa-basso normalizzato ad 1rad/s con grado deg_BP/2
+[z,p,k]=cheb1ap(deg_BP/2,rip_BP);
+[num,den]=zp2tf(z,p,k);
+F_LP=tf(num,den);
+d_LP=poly2sym(den,s);
+n_LP=poly2sym(num,s);
+fprintf('Funzione di trasferimento filtro passa-basso %d°ordine normalizzato:\n', deg_BP/2);
+F_LPn=vpa(n_LP/d_LP,5)
+Funzione di trasferimento filtro passa-basso denormalizzato
+%denormalizzazione in frequenza filtro passa-basso 
+d_LP=vpa(subs(d_LP,s,s/(2*pi*BW)),5);
+c_LP=flip(coeffs(d_LP));
+d_LP=d_LP/c_LP(1);
+n_LP=n_LP/c_LP(1);
+fprintf('Funzione di trasferimento filtro passa-basso %d°ordine denormalizzato:\n', deg_BP/2);
+F_LPd=vpa(n_LP/d_LP,5)
+Caratteristica funzione di trasferimento filtro passa-basso denormalizzato a BW
+F_LPd=subs(F_LPd,s,1i*2*pi*f);
+mag_F_LPd=abs(F_LPd);
+fplot(mag_F_LPd,[0 2500])
+hold off
+grid on
+xline(BW,'-.','f_{t}',LabelOrientation='horizontal',LabelVerticalAlignment='bottom',LabelHorizontalAlignment='right');
+title(['Risposta in frequenza filtro passa-basso ',num2str(deg_BP/2),'° ordine'])
+xlabel('Frequenza (Hz)')
+ylabel('Modulo (V)')
+Funzione di trasferimento filtro passa-banda
+%creazione filtro passa-banda con grado deg_BP
+d_BP=subs(d_LP,s,(s+(Wr^2)/s));
+d_BP=simplify(d_BP);
+[n,d]=numden(d_BP);
+num_BP=n_LP*d;
+den_BP=n;
+fprintf('Funzione di trasferimento filtro passa-banda attivo %d°ordine:\n', deg_BP);
+F_BP=vpa(num_BP/den_BP,5)
+Caratteristica funzione di trasferimento filtro passa-banda
+F_BP=subs(F_BP,s,1i*2*pi*f);
+fprintf('Poli funzione di trasferimento filtro passa-banda attivo %d°ordine:\n', deg_BP);
+poly=roots(flip(coeffs(den_BP)))
+mag_F_BP=abs(F_BP);
+fplot(mag_F_BP,[0 3000])
+hold off
+grid on
+xline(ft_inf,'-.','f_{inf}',LabelOrientation='horizontal',LabelVerticalAlignment='bottom',LabelHorizontalAlignment='right');
+xline(ft_sup,'-.','f_{sup}',LabelOrientation='horizontal',LabelVerticalAlignment='bottom',LabelHorizontalAlignment='left');
+title(['Risposta in frequenza filtro passa-banda ',num2str(deg_BP),'° ordine'])
+xlabel('Frequenza (Hz)')
+ylabel('Modulo (V)')
+Funzione di trasferimento passa-banda fattorizzata in polinomi di secondo grado
+%fattorizzazione per ottenere tutti polinomi del secondo ordine
+fact=vpa(factor(den_BP,"FactorMode","real"),5);
+fprintf('Funzione di trasferimento filtro passa-banda %d°ordine fattorizzata:\n', deg_BP);
+F_BP=vpa(num_BP/prod(fact),5)
+Q e Wn singoli stadi
+for i=1:deg_BP/2
+    coef=flip(coeffs(fact(i)));
+    Wn(i)=sqrt(coef(3));
+    Q(i)=Wn(i)/coef(2);
+end
+fprintf('Q e Wn singoli stadi:\n');
+Q=round(Q,5)
+Wn=round(Wn,1)
+% Wn=vpa((simplify(Wn/(2*pi*1000))),6)
+PROGETTAZIONE STADI ATTIVI
+Calcolo componenti filtro Sallen Key guadagno finito
+
+%asssegnazione coppia Q e Wn
+Q_skf1=Q(1);    %Tuning ideale +0.1
+Wn_skf1=Wn(1);
+fprintf('Componenti stadio Sallen Key guadagno finito:\n');
+R_skf1=1000
+C3_skf1=33*10^-9
+C5_skf1=C3_skf1
+R1_skf1=vpa((sqrt(2))/(Wn_skf1*C3_skf1))
+R2_skf1=vpa(R1_skf1)
+R4_skf1=vpa(R1_skf1)
+K_skf1=vpa(4-((sqrt(2))/Q_skf1))
+H0_skf1=vpa(K_skf1/(4-K_skf1))
+Rf_skf1=vpa(R_skf1*(K_skf1-1))
+fprintf('Parametri stadio Sallen Key guadagno finito:\n');
+Q_skf1
+Wn_skf1
+H0_skf1
+Calcolo componenti filtro Sallen Key guadagno infinito
+
+%asssegnazione coppia Q e Wn
+Q_ski1=Q(5);    %Tuning ideale +0.3
+Wn_ski1=Wn(5);
+H0_ski1=1;
+fprintf('Componenti stadio Sallen Key guadagno infinito:\n');
+C2_ski1=33*10^-9
+C3_ski1=C2_ski1
+R1_ski1=vpa(Q_ski1/(Wn_ski1*C2_ski1*H0_ski1))
+R5_ski1=vpa(Q_ski1/(((2*(Q_ski1^2))-H0_ski1)*Wn_ski1*C2_ski1))
+R6_ski1=vpa((2*Q_ski1)/(Wn_ski1*C2_ski1))
+fprintf('Parametri stadio Sallen Key guadagno infinito:\n');
+Q_ski1
+Wn_ski1
+H0_ski1
+Calcolo componenti filtro variabili di stato
+
+%asssegnazione coppia Q e Wn
+Q_vs1=Q(7);    %Tuning ideale +0.3
+Wn_vs1=Wn(7);
+fprintf('Componenti stadio Variabili di stato 1:\n');
+C1_vs1=33*10^-9
+C2_vs1=C1_vs1
+R3_vs1=1000
+R5_vs1=R3_vs1
+R6_vs1=R3_vs1
+R1_vs1=vpa(1/(Wn_vs1*C1_vs1))
+R2_vs1=R1_vs1
+R4_vs1=vpa(((2*Q_vs1)-1)*R3_vs1)
+H0_vs1=abs(round(1-(2*Q_vs1),5));
+fprintf('Parametri stadio Variabili di stato 1:\n');
+Q_vs1
+Wn_vs1
+H0_vs1
+
+%asssegnazione coppia Q e Wn
+Q_vs2=Q(8);    %Tuning ideale +0.1
+Wn_vs2=Wn(8);
+fprintf('Componenti stadio Variabili di stato 2:\n');
+C1_vs2=33*10^-9
+C2_vs2=C1_vs2
+R3_vs2=1000
+R5_vs2=R3_vs2
+R6_vs2=R3_vs2
+R1_vs2=vpa(1/(Wn_vs2*C1_vs2))
+R2_vs2=R1_vs2
+R4_vs2=vpa(((2*Q_vs2)-1)*R3_vs2)
+H0_vs2=abs(round(1-(2*Q_vs2),5));
+fprintf('Parametri stadio Variabili di stato 2:\n');
+Q_vs2
+Wn_vs2
+H0_vs2
+Calcolo componenti Tow-Thomas
+%asssegnazione coppia Q e Wn
+Q_tt1=Q(2);    %Tuning ideale -0.1
+Wn_tt1=Wn(2);
+H0_tt1=1;
+fprintf('Componenti stadio Tow-Thomas 1:\n');
+C1_tt1=33*10^(-9)
+C2_tt1=C1_tt1
+R_tt1=vpa(1/(C1_tt1*Wn_tt1))
+R1_tt1=vpa(Q_tt1*R_tt1)
+R2_tt1=vpa(R_tt1)
+R3_tt1=vpa(R_tt1)
+R4_tt1=vpa(R1_tt1/H0_tt1)
+fprintf('Parametri stadio Tow-Thomas 1:\n');
+Q_tt1
+Wn_tt1
+H0_tt1
+%asssegnazione coppia Q e Wn
+Q_tt2=Q(6);    %Tuning ideale +0.1
+Wn_tt2=Wn(6);
+H0_tt2=1;
+fprintf('Componenti stadio Tow-Thomas 2:\n');
+C1_tt2=33*10^(-9)
+C2_tt2=C1_tt2
+R_tt2=vpa(1/(C1_tt2*Wn_tt2))
+R1_tt2=vpa(Q_tt2*R_tt2)
+R2_tt2=vpa(R_tt2)
+R3_tt2=vpa(R_tt2)
+R4_tt2=vpa(R1_tt2/H0_tt2)
+fprintf('Parametri stadio Tow-Thomas 2:\n');
+Q_tt2
+Wn_tt2
+H0_tt2
+Calcolo componenti stadio passivo/GIN
+
+%asssegnazione coppia Q e Wn
+Q_pass1=Q(4);
+Wn_pass1=Wn(4);
+C1=33*10^-9;
+L1=(1/(Wn_pass1^2 *C1));
+R_L1=(Q_pass1/(sqrt(C1/L1)));
+%denormalizzazione in impedenza per 1/100
+K_imp1=100;
+fprintf('Componenti stadio RLC parallelo 1:\n');
+C1=C1*K_imp1
+L1=L1/K_imp1
+R_L1=R_L1/K_imp1
+%sintesi GIN dell'induttore
+C4_GIN1=33*10^(-9);
+R_GIN1=sqrt(L1/C4_GIN1);
+fprintf('Componenti GIN 1:\n');
+R1_GIN1=R_GIN1
+R2_GIN1=R_GIN1
+R3_GIN1=R_GIN1
+C4_GIN1
+R5_GIN1=R_GIN1
+fprintf('Parametri stadio RLC parallelo/GIN 1:\n');
+Q_pass1
+Wn_pass1
+
+%asssegnazione coppia Q e Wn
+Q_pass2=Q(3);
+Wn_pass2=Wn(3);
+C2=33*10^-9;
+L2=(1/(Wn_pass2^2 *C2));
+R_L2=(Q_pass2/(sqrt(C2/L2)));
+%denormalizzazione in impedenza per 1/1000
+K_imp2=1000;
+fprintf('Componenti stadio RLC parallelo 2:\n');
+C2=C2*K_imp2
+L2=L2/K_imp2
+R_L2=R_L2/K_imp2
+%sintesi GIN dell'induttore
+C4_GIN2=33*10^(-9);
+R_GIN2=sqrt(L2/C4_GIN2);
+fprintf('Componenti GIN 2:\n');
+R1_GIN2=R_GIN2
+R2_GIN2=R_GIN2
+R3_GIN2=R_GIN2
+C4_GIN2
+R5_GIN2=R_GIN2
+fprintf('Parametri stadio RLC parallelo/GIN 2:\n');
+Q_pass2
+Wn_pass2
+CALCOLO SENSIBILITA'
+Calcolo sensibilità Sallen Key guadagno finito
+fprintf('Funzione di trasferimento stadio Sallen Key finito:\n');
+N_skf1=vpa(((s*K_skf1)/(R1_skf1*C5_skf1))/(s^2+s*((1/(R1_skf1*C5_skf1))+(1/(R2_skf1*C5_skf1))+(1/(R4_skf1*C5_skf1))+(1/(R4_skf1*C3_skf1))-(K_skf1/(R2_skf1*C5_skf1)))+((1/(R4_skf1*C3_skf1*C5_skf1))*((1/R1_skf1)+(1/R2_skf1)))),2)
+%calcolo sensibilità R1
+N_R1=((s*K_skf1)/(x*C5_skf1))/(s^2+s*((1/(x*C5_skf1))+(1/(R2_skf1*C5_skf1))+(1/(R4_skf1*C5_skf1))+(1/(R4_skf1*C3_skf1))-(K_skf1/(R2_skf1*C5_skf1)))+((1/(R4_skf1*C3_skf1*C5_skf1))*((1/x)+(1/R2_skf1))));
+S_R1=(diff(N_R1,x))*(x/N_R1);
+S_R1=vpa(simplify(subs(S_R1,x,R1_skf1)),2);
+S_R1=subs(S_R1,s,1i*W);
+S_R1=real(S_R1);
+fplot(S_R1,[0 20000])
+hold on
+%calcolo sensibilità R2
+N_R2=((s*K_skf1)/(R1_skf1*C5_skf1))/(s^2+s*((1/(R1_skf1*C5_skf1))+(1/(x*C5_skf1))+(1/(R4_skf1*C5_skf1))+(1/(R4_skf1*C3_skf1))-(K_skf1/(x*C5_skf1)))+((1/(R4_skf1*C3_skf1*C5_skf1))*((1/R1_skf1)+(1/x))));
+S_R2=(diff(N_R2,x))*(x/N_R2);
+S_R2=vpa(simplify(subs(S_R2,x,R2_skf1)),2);
+S_R2=subs(S_R2,s,1i*W);
+S_R2=real(S_R2);
+fplot(S_R2,[0 20000])
+hold on
+%calcolo sensibilità R4
+N_R4=((s*K_skf1)/(R1_skf1*C5_skf1))/(s^2+s*((1/(R1_skf1*C5_skf1))+(1/(R2_skf1*C5_skf1))+(1/(x*C5_skf1))+(1/(x*C3_skf1))-(K_skf1/(R2_skf1*C5_skf1)))+((1/(x*C3_skf1*C5_skf1))*((1/R1_skf1)+(1/R2_skf1))));
+S_R4=(diff(N_R4,x))*(x/N_R4);
+S_R4=vpa(simplify(subs(S_R4,x,R4_skf1)),2);
+S_R4=subs(S_R4,s,1i*W);
+S_R4=real(S_R4);
+fplot(S_R4,[0 20000])
+hold on
+%calcolo sensibilità C3
+N_C3=((s*K_skf1)/(R1_skf1*C5_skf1))/(s^2+s*((1/(R1_skf1*C5_skf1))+(1/(R2_skf1*C5_skf1))+(1/(R4_skf1*C5_skf1))+(1/(R4_skf1*x))-(K_skf1/(R2_skf1*C5_skf1)))+((1/(R4_skf1*x*C5_skf1))*((1/R1_skf1)+(1/R2_skf1))));
+S_C3=(diff(N_C3,x))*(x/N_C3);
+S_C3=vpa(simplify(subs(S_C3,x,C3_skf1)),2);
+S_C3=subs(S_C3,s,1i*W);
+S_C3=real(S_C3);
+fplot(S_C3,[0 20000])
+hold on
+%calcolo sensibilità C5
+N_C5=((s*K_skf1)/(R1_skf1*x))/(s^2+s*((1/(R1_skf1*x))+(1/(R2_skf1*x))+(1/(R4_skf1*x))+(1/(R4_skf1*C3_skf1))-(K_skf1/(R2_skf1*x)))+((1/(R4_skf1*C3_skf1*x))*((1/R1_skf1)+(1/R2_skf1))));
+S_C5=(diff(N_C5,x))*(x/N_C5);
+S_C5=vpa(simplify(subs(S_C5,x,C5_skf1)),2);
+S_C5=subs(S_C5,s,1i*W);
+S_C5=real(S_C5);
+fplot(S_C5,[0 20000])
+hold off
+grid on
+xline(double(Wn_skf1),'-.','\omegan',LabelOrientation='horizontal',LabelVerticalAlignment='bottom',LabelHorizontalAlignment='center');
+title('Sensibilità funzione di trasferimento BP Sallen Key guadagno finito')
+xlabel('Pulsazione \omega')
+ylabel('Sensibilità S^{N}')
+legend({'S^{N}_{R1}','S^{N}_{R2}','S^{N}_{R4}','S^{N}_{C3}','S^{N}_{C5}'},'Location','northeast')
+fprintf('Sensibilità Sallen Key guadagno finito ad Wn\n')
+S_R1=round(subs(S_R1,W,Wn_skf1),3)
+S_R2=round(subs(S_R2,W,Wn_skf1),3)
+S_R4=round(subs(S_R4,W,Wn_skf1),3)
+S_C3=round(subs(S_C3,W,Wn_skf1),3)
+S_C5=round(subs(S_C5,W,Wn_skf1),3)
+Calcolo sensibilità Sallen Key guadagno infinito
+fprintf('Funzione di trasferimento stadio Sallen Key infinito:\n');
+N_ski1=vpa((-s/(R1_ski1*C2_ski1))/((s^2)+(s*((1/(R6_ski1*C3_ski1))+(1/(R6_ski1*C2_ski1))))+((1/(R6_ski1*C2_ski1*C3_ski1))*((1/R1_ski1)+(1/R5_ski1)))),2)
+%calcolo sensibilità R1
+N_R1=(-s/(x*C2_ski1))/((s^2)+(s*((1/(R6_ski1*C3_ski1))+(1/(R6_ski1*C2_ski1))))+((1/(R6_ski1*C2_ski1*C3_ski1))*((1/x)+(1/R5_ski1))));
+S_R1=(diff(N_R1,x))*(x/N_R1);
+S_R1=vpa(simplify(subs(S_R1,x,R1_ski1)),2);
+S_R1=subs(S_R1,s,1i*W);
+S_R1=real(S_R1);
+fplot(S_R1,[0 30000])
+hold on
+%calcolo sensibilità R5
+N_R5=(-s/(R1_ski1*C2_ski1))/((s^2)+(s*((1/(R6_ski1*C3_ski1))+(1/(R6_ski1*C2_ski1))))+((1/(R6_ski1*C2_ski1*C3_ski1))*((1/R1_ski1)+(1/x))));
+S_R5=(diff(N_R5,x))*(x/N_R5);
+S_R5=vpa(simplify(subs(S_R5,x,R5_ski1)),2);
+S_R5=subs(S_R5,s,1i*W);
+S_R5=real(S_R5);
+fplot(S_R5,[0 30000])
+hold on
+%calcolo sensibilità R6
+N_R6=(-s/(R1_ski1*C2_ski1))/((s^2)+(s*((1/(x*C3_ski1))+(1/(x*C2_ski1))))+((1/(x*C2_ski1*C3_ski1))*((1/R1_ski1)+(1/R5_ski1))));
+S_R6=(diff(N_R6,x))*(x/N_R6);
+S_R6=vpa(simplify(subs(S_R6,x,R6_ski1)),2);
+S_R6=subs(S_R6,s,1i*W);
+S_R6=real(S_R6);
+fplot(S_R6,[0 30000])
+hold on
+%calcolo sensibilità C2
+N_C2=(-s/(R1_ski1*x))/((s^2)+(s*((1/(R6_ski1*C3_ski1))+(1/(R6_ski1*x))))+((1/(R6_ski1*x*C3_ski1))*((1/R1_ski1)+(1/R5_ski1))));
+S_C2=(diff(N_C2,x))*(x/N_C2);
+S_C2=vpa(simplify(subs(S_C2,x,C2_ski1)),2);
+S_C2=subs(S_C2,s,1i*W);
+S_C2=real(S_C2);
+fplot(S_C2,[0 30000])
+hold on
+%calcolo sensibilità C3
+N_C3=(-s/(R1_ski1*C2_ski1))/((s^2)+(s*((1/(R6_ski1*x))+(1/(R6_ski1*C2_ski1))))+((1/(R6_ski1*C2_ski1*x))*((1/R1_ski1)+(1/R5_ski1))));
+S_C3=(diff(N_C3,x))*(x/N_C3);
+S_C3=vpa(simplify(subs(S_C3,x,C3_ski1)),2);
+S_C3=subs(S_C3,s,1i*W);
+S_C3=real(S_C3);
+fplot(S_C3,[0 30000])
+hold off
+grid on
+xline(double(Wn_ski1),'-.','\omegan',LabelOrientation='horizontal',LabelVerticalAlignment='bottom',LabelHorizontalAlignment='center');
+title('Sensibilità funzione di trasferimento BP Sallen Key guadagno infinito')
+xlabel('Pulsazione \omega')
+ylabel('Sensibilità S^{N}')
+legend({'S^{N}_{R1}','S^{N}_{R5}','S^{N}_{R6}','S^{N}_{C2}','S^{N}_{C3}'},'Location','northeast')
+fprintf('Sensibilità Sallen Key guadagno infinito ad Wn\n')
+S_R1=round(subs(S_R1,W,Wn_ski1),3)
+S_R5=round(subs(S_R5,W,Wn_ski1),3)
+S_R6=round(subs(S_R6,W,Wn_ski1),3)
+S_C2=round(subs(S_C2,W,Wn_ski1),3)
+S_C3=round(subs(S_C3,W,Wn_ski1),3)
+Calcolo sensibilità Variabili di stato
+fprintf('Funzione di trasferimento stadio Variabili di stato1:\n');
+N_vs1=vpa((-(((1+(R6_vs1/R5_vs1))/(1+(R3_vs1/R4_vs1)))*(s/(R1_vs1*C1_vs1))))/((s^2)+((s/(R1_vs1*C1_vs1))*((1+(R6_vs1/R5_vs1))/(1+(R4_vs1/R3_vs1))))+((R6_vs1/R5_vs1)/(R1_vs1*R2_vs1*C1_vs1*C2_vs1))),2)
+%calcolo sensibilità R1
+N_R1=(-(((1+(R6_vs1/R5_vs1))/(1+(R3_vs1/R4_vs1)))*(s/(x*C1_vs1))))/((s^2)+((s/(x*C1_vs1))*((1+(R6_vs1/R5_vs1))/(1+(R4_vs1/R3_vs1))))+((R6_vs1/R5_vs1)/(x*R2_vs1*C1_vs1*C2_vs1)));
+S_R1=(diff(N_R1,x))*(x/N_R1);
+S_R1=vpa(simplify(subs(S_R1,x,R1_vs1)),2);
+S_R1=subs(S_R1,s,1i*W);
+S_R1=real(S_R1);
+fplot(S_R1,[0 30000])
+hold on
+%calcolo sensibilità R2
+N_R2=(-(((1+(R6_vs1/R5_vs1))/(1+(R3_vs1/R4_vs1)))*(s/(R1_vs1*C1_vs1))))/((s^2)+((s/(R1_vs1*C1_vs1))*((1+(R6_vs1/R5_vs1))/(1+(R4_vs1/R3_vs1))))+((R6_vs1/R5_vs1)/(R1_vs1*x*C1_vs1*C2_vs1)));
+S_R2=(diff(N_R2,x))*(x/N_R2);
+S_R2=vpa(simplify(subs(S_R2,x,R2_vs1)),2);
+S_R2=subs(S_R2,s,1i*W);
+S_R2=real(S_R2);
+fplot(S_R2,[0 30000])
+hold on
+%calcolo sensibilità R3
+N_R3=(-(((1+(R6_vs1/R5_vs1))/(1+(x/R4_vs1)))*(s/(R1_vs1*C1_vs1))))/((s^2)+((s/(R1_vs1*C1_vs1))*((1+(R6_vs1/R5_vs1))/(1+(R4_vs1/x))))+((R6_vs1/R5_vs1)/(R1_vs1*R2_vs1*C1_vs1*C2_vs1)));
+S_R3=(diff(N_R3,x))*(x/N_R3);
+S_R3=vpa(simplify(subs(S_R3,x,R3_vs1)),2);
+S_R3=subs(S_R3,s,1i*W);
+S_R3=real(S_R3);
+fplot(S_R3,[0 30000])
+hold on
+%calcolo sensibilità R4
+N_R4=(-(((1+(R6_vs1/R5_vs1))/(1+(R3_vs1/x)))*(s/(R1_vs1*C1_vs1))))/((s^2)+((s/(R1_vs1*C1_vs1))*((1+(R6_vs1/R5_vs1))/(1+(x/R3_vs1))))+((R6_vs1/R5_vs1)/(R1_vs1*R2_vs1*C1_vs1*C2_vs1)));
+S_R4=(diff(N_R4,x))*(x/N_R4);
+S_R4=vpa(simplify(subs(S_R4,x,R4_vs1)),2);
+S_R4=subs(S_R4,s,1i*W);
+S_R4=real(S_R4);
+fplot(S_R4,[0 30000])
+hold on
+%calcolo sensibilità R5
+N_R5=(-(((1+(R6_vs1/x))/(1+(R3_vs1/R4_vs1)))*(s/(R1_vs1*C1_vs1))))/((s^2)+((s/(R1_vs1*C1_vs1))*((1+(R6_vs1/x))/(1+(R4_vs1/R3_vs1))))+((R6_vs1/x)/(R1_vs1*R2_vs1*C1_vs1*C2_vs1)));
+S_R5=(diff(N_R5,x))*(x/N_R5);
+S_R5=vpa(simplify(subs(S_R5,x,R5_vs1)),2);
+S_R5=subs(S_R5,s,1i*W);
+S_R5=real(S_R5);
+fplot(S_R5,[0 30000])
+hold on
+%calcolo sensibilità R6
+N_R6=(-(((1+(x/R5_vs1))/(1+(R3_vs1/R4_vs1)))*(s/(R1_vs1*C1_vs1))))/((s^2)+((s/(R1_vs1*C1_vs1))*((1+(x/R5_vs1))/(1+(R4_vs1/R3_vs1))))+((x/R5_vs1)/(R1_vs1*R2_vs1*C1_vs1*C2_vs1)));
+S_R6=(diff(N_R6,x))*(x/N_R6);
+S_R6=vpa(simplify(subs(S_R6,x,R6_vs1)),2);
+S_R6=subs(S_R6,s,1i*W);
+S_R6=real(S_R6);
+fplot(S_R6,[0 30000])
+hold on
+%calcolo sensibilità C1
+N_C1=(-(((1+(R6_vs1/R5_vs1))/(1+(R3_vs1/R4_vs1)))*(s/(R1_vs1*x))))/((s^2)+((s/(R1_vs1*x))*((1+(R6_vs1/R5_vs1))/(1+(R4_vs1/R3_vs1))))+((R6_vs1/R5_vs1)/(R1_vs1*R2_vs1*x*C2_vs1)));
+S_C1=(diff(N_C1,x))*(x/N_C1);
+S_C1=vpa(simplify(subs(S_C1,x,C1_vs1)),2);
+S_C1=subs(S_C1,s,1i*W);
+S_C1=real(S_C1);
+fplot(S_C1,[0 30000])
+hold on
+%calcolo sensibilità C2
+N_C2=(-(((1+(R6_vs1/R5_vs1))/(1+(R3_vs1/R4_vs1)))*(s/(R1_vs1*C1_vs1))))/((s^2)+((s/(R1_vs1*C1_vs1))*((1+(R6_vs1/R5_vs1))/(1+(R4_vs1/R3_vs1))))+((R6_vs1/R5_vs1)/(R1_vs1*R2_vs1*C1_vs1*x)));
+S_C2=(diff(N_C2,x))*(x/N_C2);
+S_C2=vpa(simplify(subs(S_C2,x,C2_vs1)),2);
+S_C2=subs(S_C2,s,1i*W);
+S_C2=real(S_C2);
+fplot(S_C2,[0 30000])
+hold off
+grid on
+xline(double(Wn_vs1),'-.','\omegan',LabelOrientation='horizontal',LabelVerticalAlignment='bottom',LabelHorizontalAlignment='center');
+title('Sensibilità funzione di trasferimento BP Variabili di stato 1')
+xlabel('Pulsazione \omega')
+ylabel('Sensibilità S^{N}')
+legend({'S^{N}_{R1}','S^{N}_{R2}','S^{N}_{R3}','S^{N}_{R4}','S^{N}_{R5}','S^{N}_{R6}','S^{N}_{C1}','S^{N}_{C2}'},'Location','northeast')
+fprintf('Sensibilità Variabili di stato 1 ad Wn\n')
+S_R1=round(subs(S_R1,W,Wn_vs1),3)
+S_R2=round(subs(S_R2,W,Wn_vs1),3)
+S_R3=round(subs(S_R3,W,Wn_vs1),3)
+S_R4=round(subs(S_R4,W,Wn_vs1),3)
+S_R5=round(subs(S_R5,W,Wn_vs1),3)
+S_R6=round(subs(S_R6,W,Wn_vs1),3)
+S_C1=round(subs(S_C1,W,Wn_vs1),3)
+S_C2=round(subs(S_C2,W,Wn_vs1),3)
+
+fprintf('Funzione di trasferimento stadio Variabili di stato 2:\n');
+N_vs2=vpa((-(((1+(R6_vs2/R5_vs2))/(1+(R3_vs2/R4_vs2)))*(s/(R1_vs2*C1_vs2))))/((s^2)+((s/(R1_vs2*C1_vs2))*((1+(R6_vs2/R5_vs2))/(1+(R4_vs2/R3_vs2))))+((R6_vs2/R5_vs2)/(R1_vs2*R2_vs2*C1_vs2*C2_vs2))),2)
+%calcolo sensibilità R1
+N_R1=(-(((1+(R6_vs2/R5_vs2))/(1+(R3_vs2/R4_vs2)))*(s/(x*C1_vs2))))/((s^2)+((s/(x*C1_vs2))*((1+(R6_vs2/R5_vs2))/(1+(R4_vs2/R3_vs2))))+((R6_vs2/R5_vs2)/(x*R2_vs2*C1_vs2*C2_vs2)));
+S_R1=(diff(N_R1,x))*(x/N_R1);
+S_R1=vpa(simplify(subs(S_R1,x,R1_vs2)),2);
+S_R1=subs(S_R1,s,1i*W);
+S_R1=real(S_R1);
+fplot(S_R1,[0 20000])
+hold on
+%calcolo sensibilità R2
+N_R2=(-(((1+(R6_vs2/R5_vs2))/(1+(R3_vs2/R4_vs2)))*(s/(R1_vs2*C1_vs2))))/((s^2)+((s/(R1_vs2*C1_vs2))*((1+(R6_vs2/R5_vs2))/(1+(R4_vs2/R3_vs2))))+((R6_vs2/R5_vs2)/(R1_vs2*x*C1_vs2*C2_vs2)));
+S_R2=(diff(N_R2,x))*(x/N_R2);
+S_R2=vpa(simplify(subs(S_R2,x,R2_vs2)),2);
+S_R2=subs(S_R2,s,1i*W);
+S_R2=real(S_R2);
+fplot(S_R2,[0 20000])
+hold on
+%calcolo sensibilità R3
+N_R3=(-(((1+(R6_vs2/R5_vs2))/(1+(x/R4_vs2)))*(s/(R1_vs2*C1_vs2))))/((s^2)+((s/(R1_vs2*C1_vs2))*((1+(R6_vs2/R5_vs2))/(1+(R4_vs2/x))))+((R6_vs2/R5_vs2)/(R1_vs2*R2_vs2*C1_vs2*C2_vs2)));
+S_R3=(diff(N_R3,x))*(x/N_R3);
+S_R3=vpa(simplify(subs(S_R3,x,R3_vs2)),2);
+S_R3=subs(S_R3,s,1i*W);
+S_R3=real(S_R3);
+fplot(S_R3,[0 20000])
+hold on
+%calcolo sensibilità R4
+N_R4=(-(((1+(R6_vs2/R5_vs2))/(1+(R3_vs2/x)))*(s/(R1_vs2*C1_vs2))))/((s^2)+((s/(R1_vs2*C1_vs2))*((1+(R6_vs2/R5_vs2))/(1+(x/R3_vs2))))+((R6_vs2/R5_vs2)/(R1_vs2*R2_vs2*C1_vs2*C2_vs2)));
+S_R4=(diff(N_R4,x))*(x/N_R4);
+S_R4=vpa(simplify(subs(S_R4,x,R4_vs2)),2);
+S_R4=subs(S_R4,s,1i*W);
+S_R4=real(S_R4);
+fplot(S_R4,[0 20000])
+hold on
+%calcolo sensibilità R5
+N_R5=(-(((1+(R6_vs2/x))/(1+(R3_vs2/R4_vs2)))*(s/(R1_vs2*C1_vs2))))/((s^2)+((s/(R1_vs2*C1_vs2))*((1+(R6_vs2/x))/(1+(R4_vs2/R3_vs2))))+((R6_vs2/x)/(R1_vs2*R2_vs2*C1_vs2*C2_vs2)));
+S_R5=(diff(N_R5,x))*(x/N_R5);
+S_R5=vpa(simplify(subs(S_R5,x,R5_vs2)),2);
+S_R5=subs(S_R5,s,1i*W);
+S_R5=real(S_R5);
+fplot(S_R5,[0 20000])
+hold on
+%calcolo sensibilità R6
+N_R6=(-(((1+(x/R5_vs2))/(1+(R3_vs2/R4_vs2)))*(s/(R1_vs2*C1_vs2))))/((s^2)+((s/(R1_vs2*C1_vs2))*((1+(x/R5_vs2))/(1+(R4_vs2/R3_vs2))))+((x/R5_vs2)/(R1_vs2*R2_vs2*C1_vs2*C2_vs2)));
+S_R6=(diff(N_R6,x))*(x/N_R6);
+S_R6=vpa(simplify(subs(S_R6,x,R6_vs2)),2);
+S_R6=subs(S_R6,s,1i*W);
+S_R6=real(S_R6);
+fplot(S_R6,[0 20000])
+hold on
+%calcolo sensibilità C1
+N_C1=(-(((1+(R6_vs2/R5_vs2))/(1+(R3_vs2/R4_vs2)))*(s/(R1_vs2*x))))/((s^2)+((s/(R1_vs2*x))*((1+(R6_vs2/R5_vs2))/(1+(R4_vs2/R3_vs2))))+((R6_vs2/R5_vs2)/(R1_vs2*R2_vs2*x*C2_vs2)));
+S_C1=(diff(N_C1,x))*(x/N_C1);
+S_C1=vpa(simplify(subs(S_C1,x,C1_vs2)),2);
+S_C1=subs(S_C1,s,1i*W);
+S_C1=real(S_C1);
+fplot(S_C1,[0 20000])
+hold on
+%calcolo sensibilità C2
+N_C2=(-(((1+(R6_vs2/R5_vs2))/(1+(R3_vs2/R4_vs2)))*(s/(R1_vs2*C1_vs2))))/((s^2)+((s/(R1_vs2*C1_vs2))*((1+(R6_vs2/R5_vs2))/(1+(R4_vs2/R3_vs2))))+((R6_vs2/R5_vs2)/(R1_vs2*R2_vs2*C1_vs2*x)));
+S_C2=(diff(N_C2,x))*(x/N_C2);
+S_C2=vpa(simplify(subs(S_C2,x,C2_vs2)),2);
+S_C2=subs(S_C2,s,1i*W);
+S_C2=real(S_C2);
+fplot(S_C2,[0 20000])
+hold off
+grid on
+xline(double(Wn_vs2),'-.','\omegan',LabelOrientation='horizontal',LabelVerticalAlignment='bottom',LabelHorizontalAlignment='center');
+title('Sensibilità funzione di trasferimento BP Variabili di stato 2')
+xlabel('Pulsazione \omega')
+ylabel('Sensibilità S^{N}')
+legend({'S^{N}_{R1}','S^{N}_{R2}','S^{N}_{R3}','S^{N}_{R4}','S^{N}_{R5}','S^{N}_{R6}','S^{N}_{C1}','S^{N}_{C2}'},'Location','northeast')
+fprintf('Sensibilità Variabili di stato 2 ad Wn\n')
+S_R1=round(subs(S_R1,W,Wn_vs2),3)
+S_R2=round(subs(S_R2,W,Wn_vs2),3)
+S_R3=round(subs(S_R3,W,Wn_vs2),3)
+S_R4=round(subs(S_R4,W,Wn_vs2),3)
+S_R5=round(subs(S_R5,W,Wn_vs2),3)
+S_R6=round(subs(S_R6,W,Wn_vs2),3)
+S_C1=round(subs(S_C1,W,Wn_vs2),3)
+S_C2=round(subs(S_C2,W,Wn_vs2),3)
+Calcolo sensibilità Tow-Thomas
+fprintf('Funzione di trasferimento stadio Tow-Thomas 1:\n');
+N_tt1=vpa((-s/(R4_tt1*C1_tt1))/((s^2)+(s/(R1_tt1*C1_tt1))+(1/(R2_tt1*R3_tt1*C1_tt1*C2_tt1))),2)
+%calcolo sensibilità R1
+N_R1=(-s/(R4_tt1*C1_tt1))/((s^2)+(s/(x*C1_tt1))+(1/(R2_tt1*R3_tt1*C1_tt1*C2_tt1)));
+S_R1=(diff(N_R1,x))*(x/N_R1);
+S_R1=vpa(simplify(subs(S_R1,x,R1_tt1)),2);
+S_R1=subs(S_R1,s,1i*W);
+S_R1=real(S_R1);
+fplot(S_R1,[0 30000])
+hold on
+%calcolo sensibilità R2
+N_R2=(-s/(R4_tt1*C1_tt1))/((s^2)+(s/(R1_tt1*C1_tt1))+(1/(x*R3_tt1*C1_tt1*C2_tt1)));
+S_R2=(diff(N_R2,x))*(x/N_R2);
+S_R2=vpa(simplify(subs(S_R2,x,R2_tt1)),2);
+S_R2=subs(S_R2,s,1i*W);
+S_R2=real(S_R2);
+fplot(S_R2,[0 30000])
+hold on
+%calcolo sensibilità R3
+N_R3=(-s/(R4_tt1*C1_tt1))/((s^2)+(s/(R1_tt1*C1_tt1))+(1/(R2_tt1*x*C1_tt1*C2_tt1)));
+S_R3=(diff(N_R3,x))*(x/N_R3);
+S_R3=vpa(simplify(subs(S_R3,x,R3_tt1)),2);
+S_R3=subs(S_R3,s,1i*W);
+S_R3=real(S_R3);
+fplot(S_R3,[0 30000])
+hold on
+%calcolo sensibilità R4
+N_R4=(-s/(x*C1_tt1))/((s^2)+(s/(R1_tt1*C1_tt1))+(1/(R2_tt1*R3_tt1*C1_tt1*C2_tt1)));
+S_R4=(diff(N_R4,x))*(x/N_R4);
+S_R4=vpa(simplify(subs(S_R4,x,R4_tt1)),2);
+S_R4=subs(S_R4,s,1i*W);
+S_R4=real(S_R4);
+fplot(S_R4,[0 30000])
+hold on
+%calcolo sensibilità C1
+N_C1=(-s/(R4_tt1*x))/((s^2)+(s/(R1_tt1*x))+(1/(R2_tt1*R3_tt1*x*C2_tt1)));
+S_C1=(diff(N_C1,x))*(x/N_C1);
+S_C1=vpa(simplify(subs(S_C1,x,C1_tt1)),2);
+S_C1=subs(S_C1,s,1i*W);
+S_C1=real(S_C1);
+fplot(S_C1,[0 30000])
+hold on
+%calcolo sensibilità C2
+N_C2=(-s/(R4_tt1*C1_tt1))/((s^2)+(s/(R1_tt1*C1_tt1))+(1/(R2_tt1*R3_tt1*C1_tt1*x)));
+S_C2=(diff(N_C2,x))*(x/N_C2);
+S_C2=vpa(simplify(subs(S_C2,x,C2_tt1)),2);
+S_C2=subs(S_C2,s,1i*W);
+S_C2=real(S_C2);
+fplot(S_C2,[0 30000])
+hold off
+grid on
+xline(double(Wn_tt1),'-.','\omegan',LabelOrientation='horizontal',LabelVerticalAlignment='bottom',LabelHorizontalAlignment='center');
+title('Sensibilità funzione di trasferimento BP Tow-Thomas 2')
+xlabel('Pulsazione \omega')
+ylabel('Sensibilità S^{N}')
+legend({'S^{N}_{R1}','S^{N}_{R2}','S^{N}_{R3}','S^{N}_{R4}','S^{N}_{C1}','S^{N}_{C2}'},'Location','northeast')
+fprintf('Sensibilità Tow-Thomas 1 ad Wn\n')
+S_R1=round(subs(S_R1,W,Wn_tt1),3)
+S_R2=round(subs(S_R2,W,Wn_tt1),3)
+S_R3=round(subs(S_R3,W,Wn_tt1),3)
+S_R4=round(subs(S_R4,W,Wn_tt1),3)
+S_C1=round(subs(S_C1,W,Wn_tt1),3)
+S_C2=round(subs(S_C2,W,Wn_tt1),3)
+
+fprintf('Funzione di trasferimento stadio Tow-Thomas 2:\n');
+N_tt2=vpa((-s/(R4_tt2*C1_tt2))/((s^2)+(s/(R1_tt2*C1_tt2))+(1/(R2_tt2*R3_tt2*C1_tt2*C2_tt2))),2)
+%calcolo sensibilità R1
+N_R1=(-s/(R4_tt2*C1_tt2))/((s^2)+(s/(x*C1_tt2))+(1/(R2_tt2*R3_tt2*C1_tt2*C2_tt2)));
+S_R1=(diff(N_R1,x))*(x/N_R1);
+S_R1=vpa(simplify(subs(S_R1,x,R1_tt2)),2);
+S_R1=subs(S_R1,s,1i*W);
+S_R1=real(S_R1);
+fplot(S_R1,[0 30000])
+hold on
+%calcolo sensibilità R2
+N_R2=(-s/(R4_tt2*C1_tt2))/((s^2)+(s/(R1_tt2*C1_tt2))+(1/(x*R3_tt2*C1_tt2*C2_tt2)));
+S_R2=(diff(N_R2,x))*(x/N_R2);
+S_R2=vpa(simplify(subs(S_R2,x,R2_tt2)),2);
+S_R2=subs(S_R2,s,1i*W);
+S_R2=real(S_R2);
+fplot(S_R2,[0 30000])
+hold on
+%calcolo sensibilità R3
+N_R3=(-s/(R4_tt2*C1_tt2))/((s^2)+(s/(R1_tt2*C1_tt2))+(1/(R2_tt2*x*C1_tt2*C2_tt2)));
+S_R3=(diff(N_R3,x))*(x/N_R3);
+S_R3=vpa(simplify(subs(S_R3,x,R3_tt2)),2);
+S_R3=subs(S_R3,s,1i*W);
+S_R3=real(S_R3);
+fplot(S_R3,[0 30000])
+hold on
+%calcolo sensibilità R4
+N_R4=(-s/(x*C1_tt2))/((s^2)+(s/(R1_tt2*C1_tt2))+(1/(R2_tt2*R3_tt2*C1_tt2*C2_tt2)));
+S_R4=(diff(N_R4,x))*(x/N_R4);
+S_R4=vpa(simplify(subs(S_R4,x,R4_tt2)),2);
+S_R4=subs(S_R4,s,1i*W);
+S_R4=real(S_R4);
+fplot(S_R4,[0 30000])
+hold on
+%calcolo sensibilità C1
+N_C1=(-s/(R4_tt2*x))/((s^2)+(s/(R1_tt2*x))+(1/(R2_tt2*R3_tt2*x*C2_tt2)));
+S_C1=(diff(N_C1,x))*(x/N_C1);
+S_C1=vpa(simplify(subs(S_C1,x,C1_tt2)),2);
+S_C1=subs(S_C1,s,1i*W);
+S_C1=real(S_C1);
+fplot(S_C1,[0 30000])
+hold on
+%calcolo sensibilità C2
+N_C2=(-s/(R4_tt2*C1_tt2))/((s^2)+(s/(R1_tt2*C1_tt2))+(1/(R2_tt2*R3_tt2*C1_tt2*x)));
+S_C2=(diff(N_C2,x))*(x/N_C2);
+S_C2=vpa(simplify(subs(S_C2,x,C2_tt2)),2);
+S_C2=subs(S_C2,s,1i*W);
+S_C2=real(S_C2);
+fplot(S_C2,[0 30000])
+hold off
+grid on
+xline(double(Wn_tt2),'-.','\omegan',LabelOrientation='horizontal',LabelVerticalAlignment='bottom',LabelHorizontalAlignment='center');
+title('Sensibilità funzione di trasferimento BP Tow-Thomas 2')
+xlabel('Pulsazione \omega')
+ylabel('Sensibilità S^{N}')
+legend({'S^{N}_{R1}','S^{N}_{R2}','S^{N}_{R3}','S^{N}_{R4}','S^{N}_{C1}','S^{N}_{C2}'},'Location','northeast')
+fprintf('Sensibilità Tow-Thomas 2 ad Wn\n')
+S_R1=round(subs(S_R1,W,Wn_tt2),3)
+S_R2=round(subs(S_R2,W,Wn_tt2),3)
+S_R3=round(subs(S_R3,W,Wn_tt2),3)
+S_R4=round(subs(S_R4,W,Wn_tt2),3)
+S_C1=round(subs(S_C1,W,Wn_tt2),3)
+S_C2=round(subs(S_C2,W,Wn_tt2),3)
+Calcolo sensibilità RLC paralleo/GIN
+fprintf('Funzione di trasferimento stadio RLC parallelo/GIN 1:\n');
+N_GIN1=vpa(1/(s*C1+(1/(s*((R1_GIN1*R3_GIN1*C4_GIN1*R5_GIN1)/R2_GIN1)))+(1/R_L1)),2)
+%calcolo sensibilità C1
+N_C1=1/(s*x+(1/(s*((R1_GIN1*R3_GIN1*C4_GIN1*R5_GIN1)/R2_GIN1)))+(1/R_L1));
+S_C1=(diff(N_C1,x))*(x/N_C1);
+S_C1=vpa(simplify(subs(S_C1,x,C1)),2);
+S_C1=subs(S_C1,s,1i*W);
+S_C1=real(S_C1);
+fplot(S_C1,[0 40000])
+hold on
+%calcolo sensibilità R_L1
+N_R_L1=1/(s*C1+(1/(s*((R1_GIN1*R3_GIN1*C4_GIN1*R5_GIN1)/R2_GIN1)))+(1/x));
+S_R_L1=(diff(N_R_L1,x))*(x/N_R_L1);
+S_R_L1=vpa(simplify(subs(S_R_L1,x,R_L1)),2);
+S_R_L1=subs(S_R_L1,s,1i*W);
+S_R_L1=real(S_R_L1);
+fplot(S_R_L1,[0 40000])
+hold on
+%calcolo sensibilità R1_GIN
+N_R1_GIN=1/(s*C1+(1/(s*((x*R3_GIN1*C4_GIN1*R5_GIN1)/R2_GIN1)))+(1/R_L1));
+S_R1_GIN=(diff(N_R1_GIN,x))*(x/N_R1_GIN);
+S_R1_GIN=vpa(simplify(subs(S_R1_GIN,x,R1_GIN1)),2);
+S_R1_GIN=subs(S_R1_GIN,s,1i*W);
+S_R1_GIN=real(S_R1_GIN);
+fplot(S_R1_GIN,[0 40000])
+hold on
+%calcolo sensibilità R2_GIN
+N_R2_GIN=1/(s*C1+(1/(s*((R1_GIN1*R3_GIN1*C4_GIN1*R5_GIN1)/x)))+(1/R_L1));
+S_R2_GIN=(diff(N_R2_GIN,x))*(x/N_R2_GIN);
+S_R2_GIN=vpa(simplify(subs(S_R2_GIN,x,R2_GIN1)),2);
+S_R2_GIN=subs(S_R2_GIN,s,1i*W);
+S_R2_GIN=real(S_R2_GIN);
+fplot(S_R2_GIN,[0 40000])
+hold on
+%calcolo sensibilità R3_GIN
+N_R3_GIN=1/(s*C1+(1/(s*((R1_GIN1*x*C4_GIN1*R5_GIN1)/R2_GIN1)))+(1/R_L1));
+S_R3_GIN=(diff(N_R3_GIN,x))*(x/N_R3_GIN);
+S_R3_GIN=vpa(simplify(subs(S_R3_GIN,x,R3_GIN1)),2);
+S_R3_GIN=subs(S_R3_GIN,s,1i*W);
+S_R3_GIN=real(S_R3_GIN);
+fplot(S_R3_GIN,[0 40000])
+hold on
+%calcolo sensibilità C4_GIN
+N_C4_GIN=1/(s*C1+(1/(s*((R1_GIN1*R3_GIN1*x*R5_GIN1)/R2_GIN1)))+(1/R_L1));
+S_C4_GIN=(diff(N_C4_GIN,x))*(x/N_C4_GIN);
+S_C4_GIN=vpa(simplify(subs(S_C4_GIN,x,C4_GIN1)),2);
+S_C4_GIN=subs(S_C4_GIN,s,1i*W);
+S_C4_GIN=real(S_C4_GIN);
+fplot(S_C4_GIN,[0 40000])
+hold on
+%calcolo sensibilità R5_GIN
+N_R5_GIN=1/(s*C1+(1/(s*((R1_GIN1*R3_GIN1*C4_GIN1*R5_GIN1)/R2_GIN1)))+(1/R_L1));
+S_R5_GIN=(diff(N_R5_GIN,x))*(x/N_R5_GIN);
+S_R5_GIN=vpa(simplify(subs(S_R5_GIN,x,R5_GIN1)),2);
+S_R5_GIN=subs(S_R5_GIN,s,1i*W);
+S_R5_GIN=real(S_R5_GIN);
+fplot(S_R5_GIN,[0 40000])
+hold off
+grid on
+xline(double(Wn_pass1),'-.','\omegan',LabelOrientation='horizontal',LabelVerticalAlignment='bottom',LabelHorizontalAlignment='center');
+title('Sensibilità funzione di trasferimento RLC parallelo/GIN 1')
+xlabel('Pulsazione \omega')
+ylabel('Sensibilità S^{N}')
+legend({'S^{N}_{C1}','S^{N}_{R_{L1}}','S^{N}_{R1_{GIN}}','S^{N}_{R2_{GIN}}','S^{N}_{R3_{GIN}}','S^{N}_{C4_{GIN}}','S^{N}_{R5_{GIN}}'},'Location','northeast')
+fprintf('Sensibilità RLC parallelo/GIN 1 ad Wn\n')
+S_C1=round(subs(S_C1,W,Wn_pass1),3)
+S_R_L1=round(subs(S_R_L1,W,Wn_pass1),3)
+S_R1_GIN=round(subs(S_R1_GIN,W,Wn_pass1),3)
+S_R2_GIN=round(subs(S_R2_GIN,W,Wn_pass1),3)
+S_R3_GIN=round(subs(S_R3_GIN,W,Wn_pass1),3)
+S_C4_GIN=round(subs(S_C4_GIN,W,Wn_pass1),3)
+S_R5_GIN=round(subs(S_R5_GIN,W,Wn_pass1),3)
+
+fprintf('Funzione di trasferimento stadio RLC parallelo/GIN 2:\n');
+N_GIN2=vpa(1/(s*C2+(1/(s*((R1_GIN2*R3_GIN2*C4_GIN2*R5_GIN2)/R2_GIN2)))+(1/R_L2)),2)
+%calcolo sensibilità C1
+N_C2=1/(s*x+(1/(s*((R1_GIN2*R3_GIN2*C4_GIN2*R5_GIN2)/R2_GIN2)))+(1/R_L2));
+S_C2=(diff(N_C2,x))*(x/N_C2);
+S_C2=vpa(simplify(subs(S_C2,x,C2)),2);
+S_C2=subs(S_C2,s,1i*W);
+S_C2=real(S_C2);
+fplot(S_C2,[0 20000])
+hold on
+%calcolo sensibilità R_L1
+N_R_L2=1/(s*C2+(1/(s*((R1_GIN2*R3_GIN2*C4_GIN2*R5_GIN2)/R2_GIN2)))+(1/x));
+S_R_L2=(diff(N_R_L2,x))*(x/N_R_L2);
+S_R_L2=vpa(simplify(subs(S_R_L2,x,R_L2)),2);
+S_R_L2=subs(S_R_L2,s,1i*W);
+S_R_L2=real(S_R_L2);
+fplot(S_R_L2,[0 20000])
+hold on
+%calcolo sensibilità R1_GIN
+N_R1_GIN=1/(s*C2+(1/(s*((x*R3_GIN2*C4_GIN2*R5_GIN2)/R2_GIN2)))+(1/R_L2));
+S_R1_GIN=(diff(N_R1_GIN,x))*(x/N_R1_GIN);
+S_R1_GIN=vpa(simplify(subs(S_R1_GIN,x,R1_GIN2)),2);
+S_R1_GIN=subs(S_R1_GIN,s,1i*W);
+S_R1_GIN=real(S_R1_GIN);
+fplot(S_R1_GIN,[0 20000])
+hold on
+%calcolo sensibilità R2_GIN
+N_R2_GIN=1/(s*C2+(1/(s*((R1_GIN2*R3_GIN2*C4_GIN2*R5_GIN2)/x)))+(1/R_L2));
+S_R2_GIN=(diff(N_R2_GIN,x))*(x/N_R2_GIN);
+S_R2_GIN=vpa(simplify(subs(S_R2_GIN,x,R2_GIN2)),2);
+S_R2_GIN=subs(S_R2_GIN,s,1i*W);
+S_R2_GIN=real(S_R2_GIN);
+fplot(S_R2_GIN,[0 20000])
+hold on
+%calcolo sensibilità R3_GIN
+N_R3_GIN=1/(s*C2+(1/(s*((R1_GIN2*x*C4_GIN2*R5_GIN2)/R2_GIN2)))+(1/R_L2));
+S_R3_GIN=(diff(N_R3_GIN,x))*(x/N_R3_GIN);
+S_R3_GIN=vpa(simplify(subs(S_R3_GIN,x,R3_GIN2)),2);
+S_R3_GIN=subs(S_R3_GIN,s,1i*W);
+S_R3_GIN=real(S_R3_GIN);
+fplot(S_R3_GIN,[0 20000])
+hold on
+%calcolo sensibilità C4_GIN
+N_C4_GIN=1/(s*C2+(1/(s*((R1_GIN2*R3_GIN2*x*R5_GIN2)/R2_GIN2)))+(1/R_L2));
+S_C4_GIN=(diff(N_C4_GIN,x))*(x/N_C4_GIN);
+S_C4_GIN=vpa(simplify(subs(S_C4_GIN,x,C4_GIN2)),2);
+S_C4_GIN=subs(S_C4_GIN,s,1i*W);
+S_C4_GIN=real(S_C4_GIN);
+fplot(S_C4_GIN,[0 20000])
+hold on
+%calcolo sensibilità R5_GIN
+N_R5_GIN=1/(s*C2+(1/(s*((R1_GIN2*R3_GIN2*C4_GIN2*R5_GIN2)/R2_GIN2)))+(1/R_L2));
+S_R5_GIN=(diff(N_R5_GIN,x))*(x/N_R5_GIN);
+S_R5_GIN=vpa(simplify(subs(S_R5_GIN,x,R5_GIN2)),2);
+S_R5_GIN=subs(S_R5_GIN,s,1i*W);
+S_R5_GIN=real(S_R5_GIN);
+fplot(S_R5_GIN,[0 20000])
+hold off
+grid on
+xline(double(Wn_pass2),'-.','\omegan',LabelOrientation='horizontal',LabelVerticalAlignment='bottom',LabelHorizontalAlignment='center');
+title('Sensibilità funzione di trasferimento RLC parallelo/GIN 2')
+xlabel('Pulsazione \omega')
+ylabel('Sensibilità S^{N}')
+legend({'S^{N}_{C2}','S^{N}_{R_{L2}}','S^{N}_{R1_{GIN}}','S^{N}_{R2_{GIN}}','S^{N}_{R3_{GIN}}','S^{N}_{C4_{GIN}}','S^{N}_{R5_{GIN}}'},'Location','northeast')
+fprintf('Sensibilità RLC parallelo/GIN 2 ad Wn\n')
+S_C2=round(subs(S_C1,W,Wn_pass2),3)
+S_R_L2=round(subs(S_R_L1,W,Wn_pass2),3)
+S_R1_GIN=round(subs(S_R1_GIN,W,Wn_pass2),3)
+S_R2_GIN=round(subs(S_R2_GIN,W,Wn_pass2),3)
+S_R3_GIN=round(subs(S_R3_GIN,W,Wn_pass2),3)
+S_C4_GIN=round(subs(S_C4_GIN,W,Wn_pass2),3)
+S_R5_GIN=round(subs(S_R5_GIN,W,Wn_pass2),3)
